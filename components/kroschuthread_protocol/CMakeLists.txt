@@ -1,0 +1,16 @@
+idf_component_register(
+    SRCS
+        "kroschuthread_protocol.c"
+        "kroschuthread_radio.c"
+        "kroschuthread_receiver.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        esp_hw_support
+        ieee802154
+        driver
+        freertos
+        log
+    PRIV_REQUIRES
+        esp_timer
+)
