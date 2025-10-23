@@ -116,6 +116,7 @@ void node_table_sweep_expired(void)
 
 void node_table_debug_print(void)
 {
+    printf("\n");
     ESP_LOGI(TAG, "=== NODE TABLE (%d entries) ===", g_node_ctx.count);
     for (int i = 0; i < g_node_ctx.count; i++) {
         node_entry_t* n = &g_node_ctx.table[i];

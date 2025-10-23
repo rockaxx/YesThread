@@ -4,6 +4,7 @@ idf_component_register(
         "kroschuthread_radio.c"
         "kroschuthread_receiver.c"
         "kroschuthread_nodeid.c"
+        "kroschuthread_commands.c"
     INCLUDE_DIRS
         "include"
     REQUIRES
@@ -13,6 +14,7 @@ idf_component_register(
         freertos
         log
         nvs_flash
+        esp_driver_usb_serial_jtag
     PRIV_REQUIRES
         esp_timer
 )
