@@ -71,44 +71,52 @@ static void IRAM_ATTR proto_rx_isr_shim(const uint8_t *payload, size_t len)
     }
 }
 
-// Worker task – už mimo ISR, tu môžeš logovať a brať mutexy
+
 static void rx_worker_task(void *arg)
 {
     (void)arg;
     for (;;) {
         proto_rx_item_t item;
         if (xQueueReceive(g_protocol_state.rx_queue, &item, portMAX_DELAY) == pdTRUE) {
-            // dekóduj header
             const kroschuthread_frame_t* f = (const kroschuthread_frame_t*)item.buf;
             uint16_t src = f->header.source_node;
             uint16_t dst = f->header.destination_node;
+            uint16_t seq = f->header.sequence_number;
 
             extern kroschuthread_radio_state_t g_radio_state;
-            //src = (src >> 8) | (src << 8);
             node_table_add_or_update(src, g_radio_state.stats.last_rssi);
 
-            if (dst == nodeid_get() || dst == NODE_BROADCAST) {
+            // === DROP RULES ===
+            if (src == nodeid_get()) continue;           // nepošli sám sebe
+            if (dst == NODE_BROADCAST) continue;         // broadcast sa neforwarduje
+
+            // Vyhľadaj, či sme to už videli
+            node_entry_t *src_entry = node_table_find(src);
+            if (src_entry && src_entry->last_seq == seq) continue; // duplikát
+
+            if (src_entry) src_entry->last_seq = seq;
+
+            // === Spracovanie pre mňa ===
+            if (dst == nodeid_get()) {
                 if (g_protocol_state.config.data_callback) {
                     g_protocol_state.config.data_callback(
                         f->payload, f->header.payload_length, f->header.source_port);
                 }
+                continue; // stop
             }
 
-            else {
-                node_entry_t* next = node_table_find(dst);
-                if (next) {
-
-                    kroschuthread_frame_queue_item_t fw = {0};
-                    memcpy(fw.frame_data, f, item.len);
-                    fw.frame_length = item.len;
-                    fw.dest_node = dst;
-                    xQueueSend(g_protocol_state.tx_queue, &fw, 0);
-                    if (s_tx_task_handle) xTaskNotifyGive(s_tx_task_handle);
-                }
+            // === Forwarding iba ak nie je cyklus ===
+            node_entry_t* next = node_table_find(dst);
+            if (next && dst != nodeid_get()) {
+                kroschuthread_frame_queue_item_t fw = {0};
+                memcpy(fw.frame_data, f, item.len);
+                fw.frame_length = item.len;
+                fw.dest_node = dst;
+                xQueueSend(g_protocol_state.tx_queue, &fw, 0);
+                if (s_tx_task_handle) xTaskNotifyGive(s_tx_task_handle);
             }
         }
     }
-
 }
 
 
