@@ -444,8 +444,8 @@ static void kroschuthread_radio_tx_done_handler(const uint8_t *frame,
     g_radio_state.rx_enabled = true;
 #endif
 
-    if (next_tx_ready_cb)
-        next_tx_ready_cb();
+    //if (next_tx_ready_cb)
+    //    next_tx_ready_cb();
 }
 
 

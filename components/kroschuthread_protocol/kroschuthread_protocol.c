@@ -105,7 +105,7 @@ static void rx_worker_task(void *arg)
                 continue; // stop
             }
 
-            // === Forwarding iba ak nie je cyklus ===
+/*             // === Forwarding iba ak nie je cyklus ===
             node_entry_t* next = node_table_find(dst);
             if (next && dst != nodeid_get()) {
                 kroschuthread_frame_queue_item_t fw = {0};
@@ -114,7 +114,7 @@ static void rx_worker_task(void *arg)
                 fw.dest_node = dst;
                 xQueueSend(g_protocol_state.tx_queue, &fw, 0);
                 if (s_tx_task_handle) xTaskNotifyGive(s_tx_task_handle);
-            }
+            } */
         }
     }
 }

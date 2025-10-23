@@ -64,7 +64,7 @@ void sender_task(void* parameters)
     uint32_t message_counter = 0;
 
     const char *long_test_message =
-    "KASANOVAPICA:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    "ZGECNUTYTEST:FUCKOFFKOKOT";
 
     while (1) {
         message_counter++;
