@@ -20,7 +20,8 @@ extern "C" {
 #define KROSCHUTHREAD_ACK_TIMEOUT_MS        50
 #define KROSCHUTHREAD_FRAME_PREAMBLE        0xAB
 #define KROSCHUTHREAD_FRAME_SYNC            0xCD
-#define KROSCHU_MAX_FRAGMENT_PAYLOAD        100
+#define KROSCHU_MAX_FRAGMENT_PAYLOAD        90
+#define KROSCHUTHREAD_TX_POWER              20  // dBm!!
 
 // Frame Types
 typedef enum {
@@ -38,30 +39,32 @@ typedef enum {
     KROSCHUTHREAD_STATUS_INVALID_FRAME = -5
 } kroschuthread_status_t;
 
-// Custom Frame Header Structure (minimal overhead)
 typedef struct __attribute__((packed)) {
-    uint8_t preamble;           // Frame preamble (0xAB)
-    uint8_t sync;               // Frame sync (0xCD) 
-    uint8_t frame_length;       // Total frame length
-    uint8_t frame_type;         // Frame type (data/ack)
-    uint16_t source_port;       // Source port
-    uint16_t destination_port;  // Destination port
-    uint16_t sequence_number;   // Sequence number for reliability
-    uint8_t payload_length;     // Payload data length
+    uint16_t preamble;
+    uint16_t sync;
+    uint8_t frame_type;
+    uint16_t source_node;     
+    uint16_t destination_node;
+    uint16_t source_port;
+    uint16_t destination_port;
+    uint16_t sequence_number;
+    uint8_t payload_length;
+    uint16_t frame_length;
 } kroschuthread_frame_header_t;
+
 
 // Complete Frame Structure
 typedef struct __attribute__((packed)) {
     kroschuthread_frame_header_t header;
     uint8_t payload[KROSCHUTHREAD_MAX_PAYLOAD_SIZE];
-    uint16_t crc;               // CRC-16 checksum
+    uint16_t crc;
 } kroschuthread_frame_t;
 
 // ACK Frame Structure (lightweight)
 typedef struct __attribute__((packed)) {
     kroschuthread_frame_header_t header;
-    uint16_t acked_sequence;    // Sequence number being acknowledged
-    uint16_t crc;               // CRC-16 checksum
+    uint16_t acked_sequence;
+    uint16_t crc;
 } kroschuthread_ack_frame_t;
 
 // Callback function types
@@ -71,7 +74,7 @@ typedef void (*kroschuthread_ack_received_callback_t)(uint16_t acked_sequence);
 // Protocol Configuration
 typedef struct {
     uint8_t channel;                                    // 802.15.4 channel
-    int8_t tx_power;                                    // Transmission power
+    int8_t tx_power;                                    // TX power
     kroschuthread_data_received_callback_t data_callback;
     kroschuthread_ack_received_callback_t ack_callback;
 } kroschuthread_config_t;
@@ -121,7 +124,7 @@ kroschuthread_status_t kroschuthread_protocol_deinit(void);
  * @param destination_port Target port
  * @return kroschuthread_status_t Status code
  */
-kroschuthread_status_t kroschuthread_protocol_send_data_no_ack(const uint8_t* data, size_t data_length, uint16_t destination_port);
+kroschuthread_status_t kroschuthread_protocol_send_data_no_ack(const uint8_t* data, size_t data_length, uint16_t dest_node, uint16_t destination_port);
 
 /**
  * @brief Process incoming frames (call this in main loop)
@@ -173,7 +176,8 @@ kroschuthread_status_t kroschuthread_encapsulate_frame(
     size_t data_length,
     kroschuthread_frame_type_t frame_type,
     uint16_t source_port,
-    uint16_t destination_port, 
+    uint16_t destination_port,
+     uint16_t destination_node,
     uint16_t sequence_number,
     kroschuthread_frame_t* frame
 );
@@ -194,6 +198,7 @@ kroschuthread_status_t kroschuthread_decapsulate_frame(
     size_t* data_length,
     kroschuthread_frame_header_t* header
 );
+
 
 
 #ifdef __cplusplus

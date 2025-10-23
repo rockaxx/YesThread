@@ -1,15 +1,15 @@
 #ifndef KROSCHUTHREAD_RADIO_H
 #define KROSCHUTHREAD_RADIO_H
 
-#define KROSCHUTHREAD_RECEIVER_ENABLED 0  // 0 = TX only, 1 = enable RX mode
+#define KROSCHUTHREAD_RECEIVER_ENABLED 1  // 0 = TX only, 1 = enable RX/TX mode
 
 #include "kroschuthread_protocol.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <esp_ieee802154_types.h>
 #include <stdbool.h>
-#include "freertos/FreeRTOS.h"     // ✅ DOPLN
-#include "freertos/semphr.h"       // ✅ DOPLN
+#include "freertos/FreeRTOS.h" 
+#include "freertos/semphr.h"   
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,7 +74,7 @@ kroschuthread_status_t kroschuthread_radio_deinit(void);
  * @param frame_length Length of frame data
  * @return kroschuthread_status_t Status code
  */
-kroschuthread_status_t kroschuthread_radio_transmit(const uint8_t* frame_data, size_t frame_length);
+kroschuthread_status_t kroschuthread_radio_transmit(const uint8_t* frame_data, size_t frame_length, uint16_t dest_node);
 
 /**
  * @brief Set radio channel

@@ -1,4 +1,6 @@
 #include "kroschuthread_radio.h"
+#include "kroschuthread_nodeid.h"
+#include "kroschuthread_protocol.h"   // 👈 Dôležité! pre definíciu frame štruktúry
 #include "esp_ieee802154.h"
 #include "esp_log.h"
 #include "string.h"
@@ -11,22 +13,32 @@
 
 static void receiver_rx_callback(const uint8_t *frame, size_t frame_length)
 {
-    if (frame_length == 0 || frame == NULL)
-        return;
+    const kroschuthread_frame_t *parsed = (const kroschuthread_frame_t *)frame;
 
-    ESP_LOGI(TAG, "RX Frame (%d bytes):", (int)frame_length);
+    if (parsed->header.destination_node == nodeid_get() ||
+        parsed->header.destination_node == NODE_BROADCAST)
+    {
+        ESP_LOGI(TAG, "RX Frame (%d bytes) from 0x%04X -> 0x%04X",
+                 (int)frame_length,
+                 parsed->header.source_node,
+                 parsed->header.destination_node);
 
-    // Dump payload in hex
-    for (size_t i = 0; i < frame_length; i++)
-        printf("%02X ", frame[i]);
-    printf("\n");
+        // Výpis len čistého payloadu
+        size_t payload_len = parsed->header.payload_length;
+        printf("Payload (ASCII): ");
+        for (size_t i = 0; i < payload_len; i++) {
+            char c = parsed->payload[i];
+            putchar((c >= 32 && c <= 126) ? c : '.');
+        }
+        printf("\n");
+    }
 }
+
 
 void receiver_task(void *arg)
 {
     ESP_LOGI(TAG, "Receiver task started (RX mode)");
 
-    // Konfigurácia rádia
     kroschuthread_radio_config_t rx_config = {
         .channel = KROSCHUTHREAD_CHANNEL,
         .tx_power = 8,
@@ -44,7 +56,6 @@ void receiver_task(void *arg)
     esp_ieee802154_set_rx_when_idle(true);
     esp_ieee802154_receive();
 
-    // Loop
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));

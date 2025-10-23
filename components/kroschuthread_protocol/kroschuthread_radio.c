@@ -1,4 +1,5 @@
 #include "kroschuthread_radio.h"
+#include "kroschuthread_nodeid.h"
 #include <string.h>
 #include <esp_log.h>
 #include <esp_ieee802154.h>
@@ -165,7 +166,7 @@ kroschuthread_status_t kroschuthread_radio_deinit(void)
     return KROSCHUTHREAD_STATUS_SUCCESS;
 }
 
-kroschuthread_status_t kroschuthread_radio_transmit(const uint8_t* frame_data, size_t frame_length)
+kroschuthread_status_t kroschuthread_radio_transmit(const uint8_t* frame_data, size_t frame_length, uint16_t dest_node)
 {
     if (!g_radio_state.initialized || !frame_data || frame_length == 0 || frame_length > 127)
         return KROSCHUTHREAD_STATUS_ERROR;
@@ -201,13 +202,14 @@ kroschuthread_status_t kroschuthread_radio_transmit(const uint8_t* frame_data, s
     tx_frame[frame_idx++] = 0x12; // PAN ID high byte
     
     // Destination address (short) - broadcast
-    tx_frame[frame_idx++] = 0xFF; 
-    tx_frame[frame_idx++] = 0xFF;
+    tx_frame[frame_idx++] = (uint8_t)(dest_node & 0xFF);
+    tx_frame[frame_idx++] = (uint8_t)((dest_node >> 8) & 0xFF);
     
     // Source address (short)
-    tx_frame[frame_idx++] = g_radio_state.local_mac_address[6];
-    tx_frame[frame_idx++] = g_radio_state.local_mac_address[7];
-    
+    uint16_t src = nodeid_get();
+    tx_frame[frame_idx++] = (uint8_t)(src & 0xFF);
+    tx_frame[frame_idx++] = (uint8_t)(src >> 8);
+        
     // Payload
     memcpy(&tx_frame[frame_idx], frame_data, frame_length);
     frame_idx += frame_length;
@@ -403,16 +405,15 @@ static void kroschuthread_radio_rx_done_handler(uint8_t *frame, esp_ieee802154_f
         }
 
         int payload_start_idx = 1 + mhr_len;
-        int raw_mac_payload_len = (int)rx_len - mhr_len; // MAC payload only (no FCS)
-        int payload_len = raw_mac_payload_len;
-        
+        int payload_len       = (int)rx_len - mhr_len; 
+
         if (payload_len > 0 && payload_len <= 120 && payload_start_idx + payload_len <= 128) {
-            // Note: Cannot log in ISR
-            // Call the protocol callback with payload data
+            const uint8_t *payload = &frame[payload_start_idx];
             if (g_radio_state.config.rx_callback) {
-                g_radio_state.config.rx_callback(&frame[payload_start_idx], (size_t)payload_len);
+                g_radio_state.config.rx_callback(payload, (size_t)payload_len);
             }
-        } else {
+        }
+        else {
             g_radio_state.stats.rx_crc_errors++;
         }
     } else {
@@ -434,9 +435,19 @@ static void kroschuthread_radio_tx_done_handler(const uint8_t *frame,
                                                 esp_ieee802154_frame_info_t *ack_frame_info)
 {
     (void)frame; (void)ack; (void)ack_frame_info;
+
     g_radio_state.tx_in_progress = false;
-    if (next_tx_ready_cb) next_tx_ready_cb();  // pipeline ISR
+
+#if KROSCHUTHREAD_RECEIVER_ENABLED
+
+    esp_ieee802154_receive();
+    g_radio_state.rx_enabled = true;
+#endif
+
+    if (next_tx_ready_cb)
+        next_tx_ready_cb();
 }
+
 
 void IRAM_ATTR esp_ieee802154_transmit_done(const uint8_t *frame,
                                             const uint8_t *ack,

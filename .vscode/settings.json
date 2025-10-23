@@ -2,6 +2,7 @@
     "files.associations": {
         "*.ejs": "html",
         "kroschuthread_protocol.h": "c",
-        "kroschuthread_radio.h": "c"
+        "kroschuthread_radio.h": "c",
+        "string.h": "c"
     }
 }
