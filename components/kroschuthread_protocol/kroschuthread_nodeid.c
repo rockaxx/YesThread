@@ -118,10 +118,17 @@ void node_table_debug_print(void)
 {
     printf("\n");
     ESP_LOGI(TAG, "=== NODE TABLE (%d entries) ===", g_node_ctx.count);
+
+    uint32_t now = esp_timer_get_time() / 1000ULL;  // aktuálny čas v ms
+
     for (int i = 0; i < g_node_ctx.count; i++) {
         node_entry_t* n = &g_node_ctx.table[i];
-        ESP_LOGI(TAG, "ID=0x%04X  RSSI=%d  last_seen=%lu ms",
-                 n->id, n->last_rssi, (unsigned long)n->last_seen_ms);
+        uint32_t diff_ms = (now > n->last_seen_ms) ? (now - n->last_seen_ms) : 0;
+        float diff_min = diff_ms / 60000.0f; // prepočet na minúty
+
+        ESP_LOGI(TAG,
+                 "ID=0x%04X  RSSI=%d  seen %.1f min ago",
+                 n->id, n->last_rssi, diff_min);
     }
 }
 

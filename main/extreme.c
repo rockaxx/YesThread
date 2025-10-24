@@ -136,7 +136,7 @@ void receiver_task(void* parameters)
 void app_main(void)
 {
     // Vypneme všetky logy ako predvolené
-    esp_log_level_set("*", ESP_LOG_NONE);
+    //esp_log_level_set("*", ESP_LOG_NONE);
     
     // Dočasne povolíme logy pre náš hlavný TAG, aby sme videli štartovacie hlášky
     esp_log_level_set(TAG, ESP_LOG_INFO); 
