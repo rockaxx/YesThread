@@ -8,7 +8,7 @@
 #include <esp_timer.h>
 #include <nvs_flash.h>
 #include "kroschuthread_protocol.h"
-#include "kroschuthread_nodeid.h"
+
 static const char* TAG = "KroschuThreadMain";
 
 // Demo mode selection - change this to test different modes
@@ -19,20 +19,18 @@ static const char* TAG = "KroschuThreadMain";
 // Callback functions
 void data_received_callback(const uint8_t* data, size_t data_length, uint16_t source_port)
 {
-    // ASCII výpis prijatého obsahu
-    printf("Received: ");
-    for (size_t i = 0; i < data_length; i++) {
-        char c = (char)data[i];
-        putchar((c >= 32 && c <= 126) ? c : '.');
+    ESP_LOGI(TAG, "=== DATA RECEIVED ===");
+    ESP_LOGI(TAG, "From port %d: %.*s (%d bytes)", source_port, (int)data_length, data, (int)data_length);
+    
+    // Hex dump of received data
+    ESP_LOGI(TAG, "Raw data hex:");
+    for (int i = 0; i < (int)data_length && i < 64; i += 16) {
+        char hex_line[64] = {0};
+        for (int j = 0; j < 16 && (i + j) < (int)data_length && (i + j) < 64; j++) {
+            sprintf(hex_line + j * 3, "%02X ", data[i + j]);
+        }
+        ESP_LOGI(TAG, "DATA[%03d]: %s", i, hex_line);
     }
-    printf("\n");
-
-}
-
-void mesh_debug_task(void) {
-
-    node_table_debug_print();
-
 }
 
 void ack_received_callback(uint16_t acked_sequence)
@@ -58,32 +56,30 @@ void sender_task(void* parameters)
         vTaskDelete(NULL);
         return;
     }
-        
-    ESP_LOGI(TAG, "=== KROSCHUTHREAD FRAGMENT TEST ===");
+    
+    ESP_LOGI(TAG, "Protocol initialized successfully");
+    
 
-    uint32_t message_counter = 0;
+    char message_buffer[65];  // stačí malé pole, 8 je s rezervou
 
-    const char *long_test_message =
-    "ZGECNUTYTEST:FUCKOFFKOKOT";
+    uint32_t start_time = xTaskGetTickCount();
+    uint32_t last_stats_time = start_time;
 
     while (1) {
-        message_counter++;
 
+        // zapíš číslo ako string (napr. "1234")
+        snprintf(message_buffer, sizeof(message_buffer), "1234567891234567891234567891123312345678912345678912345111111111");
 
         status = kroschuthread_protocol_send_data_no_ack(
-            (const uint8_t *)long_test_message,
-            strlen(long_test_message),
-            0x8A0E,
-            1234
+            (uint8_t*)message_buffer,
+            strlen(message_buffer),
+            0xFFFF,
+            KROSCHUTHREAD_DATA_PORT
         );
 
-        ESP_LOGI(TAG, "TX #%u status=%d len=%d", message_counter, status, strlen(long_test_message));
-
-        vTaskDelay(pdMS_TO_TICKS(5000)); // 0.5 s pauza medzi burstami
-        mesh_debug_task();
+        // voliteľné: krátke oneskorenie, aby si nezahltill link
+        //vTaskDelay(pdMS_TO_TICKS(5000));
     }
-
-
 }
 
 void receiver_task(void* parameters)
@@ -93,7 +89,7 @@ void receiver_task(void* parameters)
     // Initialize protocol
     kroschuthread_config_t config = {
         .channel = KROSCHUTHREAD_CHANNEL,
-        .tx_power = KROSCHUTHREAD_TX_POWER,
+        .tx_power = 20,
         .data_callback = data_received_callback,
         .ack_callback = ack_received_callback
     };
@@ -125,13 +121,10 @@ void receiver_task(void* parameters)
     }
 }
 
-
-
-
 void app_main(void)
 {
     ESP_LOGI(TAG, "KroschuThread Protocol Demo Starting...");
-    mesh_debug_task();
+    
     // Initialize NVS for PHY calibration data
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

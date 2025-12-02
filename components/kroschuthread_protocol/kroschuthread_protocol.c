@@ -1,6 +1,7 @@
 #include "kroschuthread_protocol.h"
 #include "kroschuthread_radio.h"
 #include "kroschuthread_nodeid.h"
+#include "kroschuthread_ota.h"
 #include <string.h>
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -66,11 +67,14 @@ static void IRAM_ATTR proto_rx_isr_shim(const uint8_t *payload, size_t len)
 
     BaseType_t woke = pdFALSE;
     if (g_protocol_state.rx_queue) {
-        xQueueSendFromISR(g_protocol_state.rx_queue, &item, &woke);
+        if (xQueueSendFromISR(g_protocol_state.rx_queue, &item, &woke) != pdTRUE) {
+            // ľahký drop counter: použijeme rx_crc_errors ako „drop“
+            extern kroschuthread_radio_state_t g_radio_state;
+            g_radio_state.stats.rx_crc_errors++;
+        }
         if (woke) portYIELD_FROM_ISR();
     }
 }
-
 
 static void rx_worker_task(void *arg)
 {
@@ -87,37 +91,43 @@ static void rx_worker_task(void *arg)
             node_table_add_or_update(src, g_radio_state.stats.last_rssi);
 
             // === DROP RULES ===
-            if (src == nodeid_get()) continue;           // nepošli sám sebe
-            if (dst == NODE_BROADCAST) continue;         // broadcast sa neforwarduje
+            if (src == nodeid_get()) continue;  // nepošli sám sebe
+            bool is_broadcast = (dst == NODE_BROADCAST);
 
-            // Vyhľadaj, či sme to už videli
+            // dupe filter: (seq + fragment_index)
             node_entry_t *src_entry = node_table_find(src);
-            if (src_entry && src_entry->last_seq == seq) continue; // duplikát
+            if (src_entry) {
+                if (src_entry->last_seq == seq &&
+                    src_entry->last_frag == f->header.fragment_index) {
+                    continue; // presne ten istý fragment
+                }
+                src_entry->last_seq  = seq;
+                src_entry->last_frag = f->header.fragment_index;
+            }
 
-            if (src_entry) src_entry->last_seq = seq;
-
-            // === Spracovanie pre mňa ===
-            if (dst == nodeid_get()) {
-                if (g_protocol_state.config.data_callback) {
+            // spracuj pre mňa ALEBO broadcast
+            if (dst == nodeid_get() || is_broadcast) {
+                if (f->header.total_fragments > 1) {
+                    reasm_add_fragment(
+                        f->payload,
+                        f->header.payload_length,
+                        f->header.sequence_number,
+                        f->header.fragment_index,
+                        f->header.total_fragments,
+                        f->header.source_node   // 👈 dôležité
+                    );
+                } else if (g_protocol_state.config.data_callback) {
                     g_protocol_state.config.data_callback(
                         f->payload, f->header.payload_length, f->header.source_port);
                 }
-                continue; // stop
+                continue;
             }
 
-/*             // === Forwarding iba ak nie je cyklus ===
-            node_entry_t* next = node_table_find(dst);
-            if (next && dst != nodeid_get()) {
-                kroschuthread_frame_queue_item_t fw = {0};
-                memcpy(fw.frame_data, f, item.len);
-                fw.frame_length = item.len;
-                fw.dest_node = dst;
-                xQueueSend(g_protocol_state.tx_queue, &fw, 0);
-                if (s_tx_task_handle) xTaskNotifyGive(s_tx_task_handle);
-            } */
+            // (voliteľný forwarding vypnutý)
         }
     }
 }
+
 
 
 #endif // KROSCHUTHREAD_RECEIVER_ENABLED
@@ -193,7 +203,7 @@ kroschuthread_status_t kroschuthread_protocol_init(const kroschuthread_config_t*
         .channel    = config->channel,
         .tx_power   = config->tx_power,
 #if KROSCHUTHREAD_RECEIVER_ENABLED
-        .rx_callback = (config->data_callback ? proto_rx_isr_shim : NULL),
+        .rx_callback = proto_rx_isr_shim,
 #else
         .rx_callback = NULL,
 #endif
@@ -265,7 +275,10 @@ kroschuthread_status_t kroschuthread_encapsulate_frame(
     uint16_t destination_port,
     uint16_t destination_node,
     uint16_t sequence_number,
-    kroschuthread_frame_t* frame)
+    uint16_t fragment_index,
+    uint16_t total_fragments,
+    kroschuthread_frame_t* frame
+)
 {
     if (!data || !frame || data_length > KROSCHUTHREAD_MAX_PAYLOAD_SIZE)
         return KROSCHUTHREAD_STATUS_ERROR;
@@ -280,6 +293,8 @@ kroschuthread_status_t kroschuthread_encapsulate_frame(
     frame->header.source_port       = source_port;
     frame->header.destination_port  = destination_port;
     frame->header.sequence_number   = sequence_number;
+    frame->header.fragment_index    = fragment_index;   
+    frame->header.total_fragments   = total_fragments;
     frame->header.payload_length    = (uint8_t)data_length;
     frame->header.frame_length      = sizeof(kroschuthread_frame_header_t) + data_length + sizeof(uint16_t);
 
@@ -295,21 +310,22 @@ kroschuthread_status_t kroschuthread_encapsulate_frame(
 kroschuthread_status_t kroschuthread_protocol_send_data_no_ack(
     const uint8_t* data,
     size_t data_length,
-    uint16_t dest_node,        
-    uint16_t destination_port) 
+    uint16_t dest_node,
+    uint16_t destination_port)
 {
     if (!g_protocol_state.initialized || !data || !data_length)
         return KROSCHUTHREAD_STATUS_ERROR;
 
     size_t offset = 0;
-    while (offset < data_length) {
+    uint16_t sequence = g_protocol_state.next_sequence_number++;
+    uint16_t total_frags = (data_length + KROSCHU_MAX_FRAGMENT_PAYLOAD - 1) / KROSCHU_MAX_FRAGMENT_PAYLOAD;
+
+    for (uint16_t frag_idx = 0; frag_idx < total_frags; frag_idx++) {
         size_t chunk_size = data_length - offset;
         if (chunk_size > KROSCHU_MAX_FRAGMENT_PAYLOAD)
             chunk_size = KROSCHU_MAX_FRAGMENT_PAYLOAD;
 
         kroschuthread_frame_t frame;
-        uint16_t sequence = g_protocol_state.next_sequence_number++;
-
         if (kroschuthread_encapsulate_frame(
                 &data[offset], chunk_size,
                 KROSCHUTHREAD_FRAME_TYPE_DATA,
@@ -317,11 +333,14 @@ kroschuthread_status_t kroschuthread_protocol_send_data_no_ack(
                 destination_port,
                 dest_node,
                 sequence,
+                frag_idx,    
+                total_frags, 
                 &frame) != KROSCHUTHREAD_STATUS_SUCCESS)
+        {
             return KROSCHUTHREAD_STATUS_ERROR;
+        }
 
         size_t total_frame_size = sizeof(kroschuthread_frame_header_t) + chunk_size + sizeof(uint16_t);
-
         kroschuthread_frame_queue_item_t item = {0};
         memcpy(item.frame_data, &frame, total_frame_size);
         item.frame_length = total_frame_size;
@@ -331,6 +350,7 @@ kroschuthread_status_t kroschuthread_protocol_send_data_no_ack(
             return KROSCHUTHREAD_STATUS_BUFFER_FULL;
 
         offset += chunk_size;
+        //vTaskDelay(pdMS_TO_TICKS(3));
     }
 
     if (s_tx_task_handle) xTaskNotifyGive(s_tx_task_handle);

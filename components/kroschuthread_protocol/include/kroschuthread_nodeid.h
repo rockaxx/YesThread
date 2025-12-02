@@ -14,7 +14,8 @@
 typedef struct {
     uint16_t id;          
     int8_t   last_rssi;   
-    uint16_t last_seq;    
+    uint16_t last_seq;
+    uint16_t last_frag;
     uint32_t last_seen_ms;
     uint32_t expire_ms;   
     uint8_t  hops;        

@@ -1,7 +1,7 @@
 #ifndef KROSCHUTHREAD_RADIO_H
 #define KROSCHUTHREAD_RADIO_H
 
-#define KROSCHUTHREAD_RECEIVER_ENABLED 1  // 0 = TX only, 1 = enable RX/TX mode
+#define KROSCHUTHREAD_RECEIVER_ENABLED 0  // 0 = TX only, 1 = enable RX/TX mode
 
 #include "kroschuthread_protocol.h"
 #include <stdint.h>

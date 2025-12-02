@@ -405,7 +405,9 @@ static void kroschuthread_radio_rx_done_handler(uint8_t *frame, esp_ieee802154_f
         }
 
         int payload_start_idx = 1 + mhr_len;
-        int payload_len       = (int)rx_len - mhr_len; 
+        int payload_len = (int)rx_len - mhr_len - 2;
+        if (payload_len < 0) payload_len = 0;
+
 
         if (payload_len > 0 && payload_len <= 120 && payload_start_idx + payload_len <= 128) {
             const uint8_t *payload = &frame[payload_start_idx];
@@ -444,8 +446,7 @@ static void kroschuthread_radio_tx_done_handler(const uint8_t *frame,
     g_radio_state.rx_enabled = true;
 #endif
 
-    //if (next_tx_ready_cb)
-    //    next_tx_ready_cb();
+    if (next_tx_ready_cb) {next_tx_ready_cb();}
 }
 
 

@@ -1,6 +1,7 @@
 #include "kroschuthread_radio.h"
 #include "kroschuthread_nodeid.h"
-#include "kroschuthread_protocol.h"   // 👈 Dôležité! pre definíciu frame štruktúry
+#include "kroschuthread_protocol.h"
+#include "kroschuthread_ota.h"
 #include "esp_ieee802154.h"
 #include "esp_log.h"
 #include "string.h"
@@ -42,7 +43,7 @@ void receiver_task(void *arg)
     kroschuthread_radio_config_t rx_config = {
         .channel = KROSCHUTHREAD_CHANNEL,
         .tx_power = 8,
-        .rx_callback = receiver_rx_callback
+        .rx_callback = kroschuthread_ota_process_message
     };
 
     if (kroschuthread_radio_init(&rx_config) != KROSCHUTHREAD_STATUS_SUCCESS)

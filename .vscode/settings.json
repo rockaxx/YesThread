@@ -3,6 +3,9 @@
         "*.ejs": "html",
         "kroschuthread_protocol.h": "c",
         "kroschuthread_radio.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "kroschuthread_nodeid.h": "c",
+        "kroschuthread_ota.h": "c",
+        "esp_ieee802154.h": "c"
     }
 }

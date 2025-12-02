@@ -22,11 +22,13 @@ extern "C" {
 #define KROSCHUTHREAD_FRAME_SYNC            0xCD
 #define KROSCHU_MAX_FRAGMENT_PAYLOAD        90
 #define KROSCHUTHREAD_TX_POWER              20  // dBm!!
+#define KROSCHUTHREAD_RECEIVER_ENABLED 1
 
 // Frame Types
 typedef enum {
     KROSCHUTHREAD_FRAME_TYPE_DATA = 0x01,
-    KROSCHUTHREAD_FRAME_TYPE_ACK = 0x02
+    KROSCHUTHREAD_FRAME_TYPE_ACK = 0x02,
+    KROSCHUTHREAD_FRAME_TYPE_FILE = 0x03,
 } kroschuthread_frame_type_t;
 
 // Frame Status
@@ -48,6 +50,8 @@ typedef struct __attribute__((packed)) {
     uint16_t source_port;
     uint16_t destination_port;
     uint16_t sequence_number;
+    uint16_t fragment_index;
+    uint16_t total_fragments;
     uint8_t payload_length;
     uint16_t frame_length;
 } kroschuthread_frame_header_t;
@@ -172,13 +176,15 @@ uint16_t kroschuthread_calculate_crc16(const uint8_t* data, size_t length);
  * @return kroschuthread_status_t Status code
  */
 kroschuthread_status_t kroschuthread_encapsulate_frame(
-    const uint8_t* data, 
+    const uint8_t* data,
     size_t data_length,
     kroschuthread_frame_type_t frame_type,
     uint16_t source_port,
     uint16_t destination_port,
-     uint16_t destination_node,
+    uint16_t destination_node,
     uint16_t sequence_number,
+    uint16_t fragment_index,
+    uint16_t total_fragments,
     kroschuthread_frame_t* frame
 );
 

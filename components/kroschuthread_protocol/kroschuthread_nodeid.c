@@ -88,6 +88,7 @@ void node_table_add_or_update(uint16_t id, int8_t rssi)
         slot->id = id;
         slot->last_rssi = rssi;
         slot->last_seq = 0;
+        slot->last_frag = 0xFFFF;
         slot->last_seen_ms = now;
         slot->expire_ms = now + NODE_TIMEOUT_MS;
         slot->hops = 1;
